@@ -6,16 +6,23 @@ format:
 	black *.py
 
 lint:
-	flake8 hello.py gold_analysis.py
+	flake8 *.py
 
 test:
-	python -m pytest -vv --cov=hello test_hello.py
+	python -m pytest -vv test_gold_analysis.py
 
-# New target for running the data analysis
 analyze:
 	python gold_analysis.py
 
+docker-build:
+	docker build -t gold-analysis .
+
+docker-run:
+	docker run --rm gold-analysis
+
 clean:
-	rm -rf **pycache** .pytest_cache .coverage *.png
+	rm -rf __pycache__ .pytest_cache *.png
 
 all: install format lint test
+
+.PHONY: install format lint test analyze docker-build docker-run clean all
