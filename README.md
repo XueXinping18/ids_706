@@ -130,4 +130,4 @@ The Dockerfile installs all requirements and runs the analysis automatically.
 - `gold_analysis.png` - visualization dashboard showing SPX distribution, trends, and patterns
 
 ![Gold Analysis Results](gold_analysis.png)
-
+![Test results](test_results.png)
