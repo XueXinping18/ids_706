@@ -100,4 +100,10 @@ The suite covers loading (local vs. Kaggle fallback), inspection, enrichment/yea
 └── .github/workflows/ci.yaml
 ```
 
+## CI & Commit Diff
+![CI](ci.png)
 
+![Commit diff 1](diff1.png)
+![Commit diff 2](diff2.png)
+![Commit diff 3](diff3.png)
+![Commit diff 4](diff4.png)
