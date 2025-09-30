@@ -1,133 +1,103 @@
-# Gold Price Data Analysis
+# Macro Signals & SPX — Next-Day Return Test
 
-This is my data analysis project for class. I'm analyzing gold price data from 2015-2025 and using Docker to make it reproducible.
+[![CI](https://github.com/XueXinping18/ids_706/actions/workflows/ci.yaml/badge.svg)](https://github.com/XueXinping18/ids_706/actions/workflows/ci.yaml)
+
+## Problem
+
+On top of the previous mini-assigments, my additional problem that I try to figure out can be described in one sentence. Can yesterday’s information from **GLD (gold)**, **USO (oil)**, **SLV (silver)** and **EURUSD** help predict the **next-day return of SPX**?
+I evaluate this on daily data (2015–2025) with a chronological train/test split and compare against a naïve baseline.
 
 ## Dataset
-Source: https://www.kaggle.com/datasets/mdanwarhossain200110/gold-price-2015-2025
-File: `gold_data_2015_25.csv` (auto-downloaded from Kaggle)
+
+* Source: Kaggle — *Gold Price 2015–2025*
+* File: `gold_data_2015_25.csv` (downloaded automatically on first run)
+* Columns used: `Date`, `SPX`, `GLD`, `USO`, `SLV`, `EUR/USD`
 
 ## Setup
 
-### Docker Setup 
-```bash
-# Build the container
-make docker-build
+### Local
 
-# Run the analysis
-make docker-run
-```
-
-### Local Setup (not removed for reference)
 ```bash
 make install
 make analyze
 ```
 
+### Docker
+
+```bash
+make docker-build
+make docker-run
+```
+
+## The functionality of the code
+
+1. **Load & Inspect** – prints `.info()` / `.describe()`, checks missing values & duplicates.
+2. **Enrich** – adds `year` where a date column exists; reports yearly stats.
+3. **Baseline ML (levels)** – quick Linear Regression & Random Forest using numeric columns; 80/20 split.
+4. **Next-Day Experiment (returns)** – builds returns, lags (t-1), 20-day vol, and predicts `SPX` **next-day return**.
+5. **Figures** – two outputs:
+
+   * `gold_analysis.png` – EDA dashboard
+     ![Gold Analysis Results](gold_analysis.png)
+   * `nextday_summary.png` – one-page panel for the next-day test (heatmap, GLD–SPX rolling corr, RF importance, y_true vs y_pred, residuals, and metrics)
+     ![Next-day summary](nextday_summary.png)
+
+## Data preparation (for the next-day test)
+
+* Normalize column names (`EUR/USD → EURUSD`).
+* Compute daily returns for SPX/GLD/USO/SLV/EURUSD.
+* Add 1-day lags for returns and levels; add 20-day rolling vol on returns.
+* Target: `y_next = SPX_ret.shift(-1)`.
+* Drop rows introduced by `pct_change/rolling/shift`.
+* Mean imputation for any remaining numeric NAs when training baselines.
+
+## Methods
+
+* **Split:** 80% train / 20% test in time order.
+* **Baseline:** yesterday’s SPX return.
+* **Models:** Linear Regression, Random Forest (seed=42).
+* **Metrics:** R² and RMSE on the test set.
+
+## Results & Insights
+
+1) Setup. I test a one-day horizon: yesterday’s GLD/USO/SLV/EURUSD with simple transforms (returns, lag-1, 20-day volatility) to predict next-day SPX return. Train/test is chronological (80/20).
+
+2) Baseline. I use a naïve rule (yesterday’s SPX return) as the minimal benchmark for any short-horizon signal.
+
+3) Out-of-sample result. In this run the Random Forest gives R² ≈ −0.324 with RMSE ≈ 0.0113 on the test set. A negative R² means it underperforms a constant-mean prediction; mapping yesterday’s public data to tomorrow’s return is not learnable here.
+
+4) Feature importance vs usefulness. SPX_ret_lag1 ranks highest, but the y_true vs y_pred panel clusters near zero and residuals look noise-like. An important feature inside a model does not guarantee better out-of-sample accuracy.
+
+5) Regimes don’t translate to an edge. The GLD–SPX 120-day rolling correlation moves across periods (risk-on/off), yet the day-ahead forecast does not improve during those swings. Time-varying correlation does not imply exploitable next-day predictability.
+
+6) EMH implication. The findings align with weak-form EMH: using only historical prices and returns from liquid assets, next-day returns are hard to predict beyond trivial baselines.
+
+7) Practical takeaway. For day-ahead timing, I treat cross-asset signals as context rather than a forecast engine. If I extend this work, I will consider longer horizons (weekly/monthly), volatility or tail-risk targets, and event/regime filters with strict out-of-sample tests.
+
+
 ## Testing
 
-I wrote comprehensive tests covering all the core functions with edge case handling. Run with:
 ```bash
 make test
 ```
 
-**Test Coverage:**
-- **Data Loading Tests** (3 tests) - File exists locally, Kaggle download, and no CSV files found
-- **Data Inspection Tests** (3 tests) - Clean data, missing values, and duplicate records  
-- **Filtering Tests** (3 tests) - Proper dates, no numeric columns, and invalid date formats
-- **Machine Learning Tests** (3 tests) - Sufficient data, insufficient data, and single column cases
-- **Visualization Tests** (2 tests) - Normal plotting and no numeric data edge case
-- **System Tests** (2 tests) - Complete pipeline and data loading failure handling
+The suite covers loading (local vs. Kaggle fallback), inspection, enrichment/year extraction, ML edge cases, plotting (mocked), and a small end-to-end pipeline.
 
-The tests are organized into classes by functionality and include both positive cases (normal operation) and negative cases (edge cases and error conditions). All tests use mock data so they run quickly without needing the actual Kaggle dataset or external dependencies.
+## Tooling
 
-## Files
-- `gold_analysis.py` - main analysis script
-- `test_gold_analysis.py` - test suite for the functions
-- `Dockerfile` - Docker container setup
-- `requirements.txt` - Python dependencies
-- `Makefile` - build automation
-- `gold_data_2015_25.csv` - dataset (auto-downloaded from Kaggle)
+* **CI:** GitHub Actions runs format (black), lint (flake8), tests, and analysis; badge above.
+* **Makefile:** `install`, `format`, `lint`, `test`, `analyze`, `clean`.
 
-## Available Make Commands
-```bash
-make install      # Install dependencies
-make format       # Format code with black
-make lint         # Lint code with flake8
-make test         # Run tests
-make analyze      # Run data analysis
-make docker-build # Build Docker image
-make docker-run   # Run in Docker
-make clean        # Clean generated files
-make all          # Run install, format, lint, test
+## Repo structure
+
+```
+.
+├── gold_analysis.py
+├── test_gold_analysis.py
+├── Makefile
+├── requirements.txt
+├── Dockerfile
+└── .github/workflows/ci.yaml
 ```
 
-## What it does
-### 1. Import Dataset
-Loads the gold price CSV file and displays first few rows
-### 2. Data Inspection
-- Shows dataset info with `.info()` and `.describe()`
-- Checks for missing values and duplicates
-- Basic data quality assessment
-### 3. Filtering and Grouping
-- Filters for high-price periods (top 25%)
-- Groups data by year for trend analysis
-- Calculates yearly statistics (mean, std, count)
-### 4. Machine Learning
-- Tests Linear Regression and Random Forest models
-- Splits data 80/20 for training/testing
-- Reports R² scores for both models
-- Uses available numeric features to predict prices
-### 5. Visualization
-Creates 4 plots:
-- Histogram of price distribution
-- Box plot for outlier detection
-- Time series of yearly averages
-- Scatter plot over time
 
-## Key Findings
-### Dataset Overview
-- **Total Records**: 2,666 entries (2015-2025)
-- **Data Quality**: No missing values, no duplicates
-- **Main Metrics**: SPX, GLD (gold), USO (oil), SLV (silver), EUR/USD
-### Market Analysis
-- **SPX Range**: 1,829 to 6,468 points
-- **High Performance Periods**: 667 records above 4,373 points (top 25%)
-- **Best Year**: 2025 with average SPX of 5,922 points
-- **Growth Trend**: Consistent upward trend from 2015-2025
-### Yearly Performance
-| Year | Average SPX | Records |
-|------|-------------|---------|
-| 2015 | 2,061 | 252 |
-| 2016 | 2,095 | 252 |
-| 2017 | 2,449 | 249 |
-| 2018 | 2,746 | 251 |
-| 2019 | 2,914 | 251 |
-| 2020 | 3,218 | 253 |
-| 2021 | 4,273 | 252 |
-| 2022 | 4,099 | 251 |
-| 2023 | 4,284 | 250 |
-| 2024 | 5,428 | 252 |
-| 2025 | 5,922 | 153 |
-### Machine Learning Results
-- **Linear Regression R²**: 0.9574 (95.74% accuracy)
-- **Random Forest R²**: 0.9959 (99.59% accuracy)
-- **Best Model**: Random Forest shows superior predictive performance
-- **Model Performance**: Both models show excellent predictive capability
-
-## Docker Setup
-
-Simple Docker container with Python 3.12 and all the packages needed.
-
-Build and run:
-```bash
-docker build -t gold-analysis .
-docker run --rm gold-analysis
-```
-
-The Dockerfile installs all requirements and runs the analysis automatically.
-
-## Generated Files
-- `gold_analysis.png` - visualization dashboard showing SPX distribution, trends, and patterns
-
-![Gold Analysis Results](gold_analysis.png)
-![Test results](test_results.webp)
