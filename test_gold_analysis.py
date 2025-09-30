@@ -7,7 +7,6 @@ from gold_analysis import (
     enrich_with_year_and_flags,
     train_and_evaluate_models,
     plot_basic_charts,
-    main,
 )
 
 
@@ -151,4 +150,3 @@ class TestVisualization:
         with patch("matplotlib.pyplot.show"):
             # Should handle gracefully without errors
             plot_basic_charts(df)
-
