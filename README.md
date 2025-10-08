@@ -1,109 +1,113 @@
-# Macro Signals & SPX — Next-Day Return Test
+# SQLite — University Rankings (2012–2015)
 
-[![CI](https://github.com/XueXinping18/ids_706/actions/workflows/ci.yaml/badge.svg)](https://github.com/XueXinping18/ids_706/actions/workflows/ci.yaml)
+This README documents how I connected to a pre-built SQLite database, ran basic analysis, and executed CRUD operations.
 
-## Problem
+## Environment & Connection
+- **Tool:** `sqlite3` CLI
+- **Connect:** `sqlite3 university.db`
+- nicer output inside the shell:
+  ```sql
+  .headers on
+  .mode box
+  .timer on
+  ```
 
-On top of the previous mini-assigments, my additional problem that I try to figure out can be described in one sentence. Can yesterday’s information from **GLD (gold)**, **USO (oil)**, **SLV (silver)** and **EURUSD** help predict the **next-day return of SPX**?
-I evaluate this on daily data (2015–2025) with a chronological train/test split and compare against a naïve baseline.
-
-## Dataset
-
-* Source: Kaggle — *Gold Price 2015–2025*
-* File: `gold_data_2015_25.csv` (downloaded automatically on first run)
-* Columns used: `Date`, `SPX`, `GLD`, `USO`, `SLV`, `EUR/USD`
-
-## Setup
-
-### Local
-
-```bash
-make install
-make analyze
+## View schema
+```sql
+CREATE TABLE university_rankings ( 
+    world_rank        INTEGER, 
+    institution       TEXT, 
+    country           TEXT, 
+    national_rank     INTEGER, 
+    quality_of_education INTEGER, 
+    alumni_employment    INTEGER, 
+    quality_of_faculty   INTEGER, 
+    publications         INTEGER, 
+    influence            INTEGER, 
+    citations            INTEGER, 
+    broad_impact         INTEGER, 
+    patents              INTEGER, 
+    score                REAL, 
+    year                 INTEGER 
+);
 ```
 
-### Docker
+## Basic Analysis (before modifications)
+- **Total rows:** `2200`
+- **Rows by year:**
+  - 2012: `100`
+  - 2013: `100`
+  - 2014: `1000`
+  - 2015: `1000`
 
-```bash
-make docker-build
-make docker-run
+- **Score stats by year:**
+  - 2012 — min: `43.36`, max: `100.0`, avg: `54.941`
+  - 2013 — min: `44.26`, max: `100.0`, avg: `55.271`
+  - 2014 — min: `44.18`, max: `100.0`, avg: `47.271`
+  - 2015 — min: `44.02`, max: `100.0`, avg: `46.864`
+
+- **Global score stats:** min `43.36`, max `100.0`, sum `105156.47`, avg `47.798`
+
+## CRUD Tasks
+
+### 1) INSERT — Add new university (2014)
+**Operation:** Insert *Duke Tech (USA)* with `world_rank=350`, `score=60.5`, `year=2014`.
+```sql
+BEGIN;
+INSERT INTO university_rankings (institution, country, world_rank, score, year)
+VALUES ('Duke Tech', 'USA', 350, 60.5, 2014);
+SELECT changes() AS inserted_rows;   -- 1
+COMMIT;
 ```
+**Result:** 1 row inserted. Verified presence of the new record.
 
-## The functionality of the code
-
-1. **Load & Inspect** – prints `.info()` / `.describe()`, checks missing values & duplicates.
-2. **Enrich** – adds `year` where a date column exists; reports yearly stats.
-3. **Baseline ML (levels)** – quick Linear Regression & Random Forest using numeric columns; 80/20 split.
-4. **Next-Day Experiment (returns)** – builds returns, lags (t-1), 20-day vol, and predicts `SPX` **next-day return**.
-5. **Figures** – two outputs:
-
-   * `gold_analysis.png` – EDA dashboard
-     ![Gold Analysis Results](gold_analysis.png)
-   * `nextday_summary.png` – one-page panel for the next-day test (heatmap, GLD–SPX rolling corr, RF importance, y_true vs y_pred, residuals, and metrics)
-     ![Next-day summary](nextday_summary.png)
-
-## Data preparation (for the next-day test)
-
-* Normalize column names (`EUR/USD → EURUSD`).
-* Compute daily returns for SPX/GLD/USO/SLV/EURUSD.
-* Add 1-day lags for returns and levels; add 20-day rolling vol on returns.
-* Target: `y_next = SPX_ret.shift(-1)`.
-* Drop rows introduced by `pct_change/rolling/shift`.
-* Mean imputation for any remaining numeric NAs when training baselines.
-
-## Methods
-
-* **Split:** 80% train / 20% test in time order.
-* **Baseline:** yesterday’s SPX return.
-* **Models:** Linear Regression, Random Forest (seed=42).
-* **Metrics:** R² and RMSE on the test set.
-
-## Results & Insights
-
-1) Setup. I test a one-day horizon: yesterday’s GLD/USO/SLV/EURUSD with simple transforms (returns, lag-1, 20-day volatility) to predict next-day SPX return. Train/test is chronological (80/20).
-
-2) Baseline. I use a naïve rule (yesterday’s SPX return) as the minimal benchmark for any short-horizon signal.
-
-3) Out-of-sample result. In this run the Random Forest gives R² ≈ −0.324 with RMSE ≈ 0.0113 on the test set. A negative R² means it underperforms a constant-mean prediction; mapping yesterday’s public data to tomorrow’s return is not learnable here.
-
-4) Feature importance vs usefulness. SPX_ret_lag1 ranks highest, but the y_true vs y_pred panel clusters near zero and residuals look noise-like. An important feature inside a model does not guarantee better out-of-sample accuracy.
-
-5) Regimes don’t translate to an edge. The GLD–SPX 120-day rolling correlation moves across periods (risk-on/off), yet the day-ahead forecast does not improve during those swings. Time-varying correlation does not imply exploitable next-day predictability.
-
-6) EMH implication. The findings align with weak-form EMH: using only historical prices and returns from liquid assets, next-day returns are hard to predict beyond trivial baselines.
-
-7) Practical takeaway. For day-ahead timing, I treat cross-asset signals as context rather than a forecast engine. If I extend this work, I will consider longer horizons (weekly/monthly), volatility or tail-risk targets, and event/regime filters with strict out-of-sample tests.
-
-
-## Testing
-
-```bash
-make test
+### 2) READ — Japan in global top 200 for 2013
+**Question:** How many universities from Japan appear in the global top 200 in 2013?
+```sql
+SELECT COUNT(*) AS jp_top200_2013
+FROM university_rankings
+WHERE year = 2013 AND country = 'Japan' AND world_rank <= 200;
 ```
+**Answer:** `6`
 
-The suite covers loading (local vs. Kaggle fallback), inspection, enrichment/year extraction, ML edge cases, plotting (mocked), and a small end-to-end pipeline.
-
-## Tooling
-
-* **CI:** GitHub Actions runs format (black), lint (flake8), tests, and analysis; badge above.
-* **Makefile:** `install`, `format`, `lint`, `test`, `analyze`, `clean`.
-
-## Repo structure
-
+### 3) UPDATE — Correct Oxford 2014 score (+1.2)
+**Operation:** Increase 2014 *University of Oxford* score by `+1.2`.
+```sql
+BEGIN;
+UPDATE university_rankings
+SET score = score + 1.2
+WHERE institution = 'University of Oxford' AND year = 2014;
+SELECT changes() AS updated_rows;    -- 1
+COMMIT;
 ```
-.
-├── gold_analysis.py
-├── test_gold_analysis.py
-├── Makefile
-├── requirements.txt
-├── Dockerfile
-└── .github/workflows/ci.yaml
+**Result:** 1 row updated.  
+**Post-update check:**
+```sql
+SELECT institution, year, score
+FROM university_rankings
+WHERE institution='University of Oxford' AND year=2014;
 ```
+**Observed:** score is now `98.71` → **previous score was `97.51`**.
 
-## CI & Commit Diff
-![CI](ci.png)
+### 4) DELETE — Remove 2015 rows with score < 45
+**Policy:** Committee decided scores `< 45` in 2015 should be removed.
+```sql
+-- count before delete
+SELECT COUNT(*) AS to_delete_2015_below_45
+FROM university_rankings
+WHERE year = 2015 AND score < 45;  -- 556
 
-![Commit diff 1](diff1.png)
-![Commit diff 2](diff2.png)
-![Commit diff 3](diff3.png)
-![Commit diff 4](diff4.png)
+BEGIN;
+DELETE FROM university_rankings
+WHERE year = 2015 AND score < 45;
+SELECT changes() AS deleted_rows;
+COMMIT;
+```
+**Result:** `556` rows deleted from 2015.
+
+### Net row count effect
+- Start: `2200`
+- After **INSERT**: `+1` → `2201`
+- After **DELETE**: `-556` → **`1645` final rows**
+
+Everything is reproducible from the `.sql` files included in this folder.
