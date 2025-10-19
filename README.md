@@ -162,8 +162,11 @@ SELECT order_id, status FROM orders WHERE order_id = 104;
 ```
 
 ![Fail to load image](./1.png)
+
 Interpretation:
+
 * The order 104 remains PENDING because no payment record exists yet.
+
 Notes / Pitfalls:
 
 * Guard with status='PENDING' to avoid bumping already-finalized orders.
