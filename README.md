@@ -106,7 +106,6 @@ WHERE order_id = 104
 SELECT order_id, status FROM orders WHERE order_id = 104;
 ```
 
-**Screenshot:**
 ![Fail to load image](./1.png)
 
 ---
@@ -122,7 +121,6 @@ ORDER BY price DESC
 LIMIT 3;
 ```
 
-**Screenshot:**
 ![Fail to load image](./2.png)
 
 ---
@@ -143,8 +141,7 @@ HAVING SUM(p.amount) >= 300
 ORDER BY total_spent DESC;
 ```
 
-**Screenshot:**
-*(Insert image `Q3.png` here)*
+![Fail to load image](./3.png)
 
 ---
 
@@ -165,8 +162,7 @@ JOIN products pr    ON pr.product_id = oi.product_id
 ORDER BY o.order_id, oi.order_item_id;
 ```
 
-**Screenshot:**
-*(Insert image `Q4.png` here)*
+![Fail to load image](./4.png)
 
 ---
 
@@ -191,8 +187,7 @@ ORDER BY c.customer_id, o.order_id;
 > LEFT JOIN customers c ON c.customer_id = o.customer_id;
 > ```
 
-**Screenshot:**
-*(Insert image `Q5.png` here)*
+![Fail to load image](./5.png)
 
 ---
 
@@ -215,8 +210,7 @@ JOIN customers c ON c.customer_id = o.customer_id
 ORDER BY o.order_id;
 ```
 
-**Screenshot:**
-*(Insert image `Q6.png` here)*
+![Fail to load image](./6.png)
 
 ---
 
@@ -241,8 +235,7 @@ FROM totals
 ORDER BY spend_rank;
 ```
 
-**Screenshot:**
-*(Insert image `Q7.png` here)*
+![Fail to load image](./7.png)
 
 ---
 
@@ -276,8 +269,7 @@ WITH RECURSIVE hierarchy AS (
 SELECT * FROM hierarchy ORDER BY level, employee_id;
 ```
 
-**Screenshot:**
-*(Insert image `Q8.png` here)*
+![Fail to load image](./8.png)
 
 ---
 
@@ -300,8 +292,7 @@ GROUP BY strftime('%Y-%m', o.order_date)
 ORDER BY order_month;
 ```
 
-**Screenshot:**
-*(Insert image `Q9.png` here)*
+![Fail to load image](./9.png)
 
 ---
 
@@ -322,7 +313,5 @@ SELECT DISTINCT customer_id FROM orders
 ORDER BY customer_id;
 ```
 
-**Screenshot:**
-*(Insert image `Q10.png` here)*
-
+![Fail to load image](./10.png)
 
