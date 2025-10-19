@@ -34,7 +34,62 @@ This design supports analytics such as customer spending, product sales, and emp
 | **employees**   | Employee data with `manager_id` for organizational hierarchy.  |
 
 Each table keeps only attributes unique to that entity, minimizing redundancy.
+Tables are created as follows.
+```sql
+CREATE TABLE customers (
+  customer_id INTEGER PRIMARY KEY,
+  first_name TEXT NOT NULL,
+  last_name  TEXT NOT NULL,
+  email      TEXT UNIQUE,
+  city       TEXT,
+  state      TEXT,
+  created_at TEXT DEFAULT (date('now'))
+);
 
+CREATE TABLE products (
+  product_id INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL,
+  category   TEXT NOT NULL,
+  price      REAL NOT NULL CHECK(price >= 0)
+);
+
+CREATE TABLE employees (
+  employee_id INTEGER PRIMARY KEY,
+  full_name   TEXT NOT NULL,
+  role        TEXT NOT NULL,
+  manager_id  INTEGER,
+  FOREIGN KEY(manager_id) REFERENCES employees(employee_id)
+);
+
+CREATE TABLE orders (
+  order_id    INTEGER PRIMARY KEY,
+  customer_id INTEGER NOT NULL,
+  employee_id INTEGER,
+  order_date  TEXT NOT NULL,           -- ISO date string
+  status      TEXT NOT NULL,            -- 'PENDING','SHIPPED','CANCELLED','REFUNDED'
+  FOREIGN KEY(customer_id) REFERENCES customers(customer_id),
+  FOREIGN KEY(employee_id) REFERENCES employees(employee_id)
+);
+
+CREATE TABLE order_items (
+  order_item_id INTEGER PRIMARY KEY,
+  order_id      INTEGER NOT NULL,
+  product_id    INTEGER NOT NULL,
+  quantity      INTEGER NOT NULL CHECK(quantity > 0),
+  unit_price    REAL NOT NULL CHECK(unit_price >= 0),
+  FOREIGN KEY(order_id)   REFERENCES orders(order_id),
+  FOREIGN KEY(product_id) REFERENCES products(product_id)
+);
+
+CREATE TABLE payments (
+  payment_id INTEGER PRIMARY KEY,
+  order_id   INTEGER NOT NULL,
+  amount     REAL NOT NULL CHECK(amount >= 0),
+  method     TEXT NOT NULL,            -- 'CARD','CASH','PAYPAL'
+  paid_at    TEXT NOT NULL,
+  FOREIGN KEY(order_id) REFERENCES orders(order_id)
+);
+```
 ---
 
 ### Normalization (≈ 3NF)
