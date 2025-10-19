@@ -142,9 +142,6 @@ CREATE TABLE payments (
 
 ## 2. Practice Questions and Queries
 
-Each query below answers a specific analytical or operational question about the dataset.
-After running each SQL command, capture the result and paste its **screenshot** in the space provided.
-
 ---
 
 ### Q1. How can we update a specific order that is still pending but already have a shipped record?
@@ -164,6 +161,7 @@ SELECT order_id, status FROM orders WHERE order_id = 104;
 ![Fail to load image](./1.png)
 
 Reasoning: The EXISTS subquery checks for payments before updating.
+
 Interpretation: Order 104 stayed PENDING because no payment record was found.
 
 Notes / Pitfalls:
@@ -188,6 +186,7 @@ LIMIT 3;
 ![Fail to load image](./2.png)
 
 Reasoning: Ordered products by price descending, limited to three.
+
 Interpretation: Standing Desk, Ergonomic Chair, and Noise-Cancelling Headphones are the most expensive items.
 
 Notes / Pitfalls.
@@ -217,6 +216,7 @@ ORDER BY total_spent DESC;
 ![Fail to load image](./3.png)
 
 Reasoning: Aggregated total payments per customer with HAVING.
+
 Interpretation: Ava Nguyen and Liam Patel exceeded $300, showing high-value customers.
 
 Notes / Pitfalls:
@@ -247,6 +247,7 @@ ORDER BY o.order_id, oi.order_item_id;
 ![Fail to load image](./4.png)
 
 Reasoning: Joined orders, items, and products, computing extended prices.
+
 Interpretation: Each line correctly displays quantity × price totals per order.
 
 Notes / Pitfalls.
@@ -281,13 +282,12 @@ ORDER BY c.customer_id, o.order_id;
 ![Fail to load image](./5.png)
 
 Reasoning: Used a LEFT JOIN to include customers with or without orders.
+
 Interpretation: Every customer appears; multiple order IDs confirm one-to-many mapping.
 
 Notes / Pitfalls.
 
 * The emulation is flipping sides, not a generic "LEFT JOIN the other way" on the same tables.
-
-* If you instead orders LEFT JOIN customers, you’d include all orders, not all customers.
 
 ---
 
@@ -313,6 +313,7 @@ ORDER BY o.order_id;
 ![Fail to load image](./6.png)
 
 Reasoning: CASE converts codes to labels; COALESCE handles null cities.
+
 Interpretation: Output clearly shows readable statuses and consistent city data.
 
 Notes / Pitfalls.
@@ -347,13 +348,8 @@ ORDER BY spend_rank;
 ![Fail to load image](./7.png)
 
 Reasoning: Window functions calculate ranking and prior totals.
+
 Interpretation: Ava leads spending, followed by Liam and Isla, with previous totals visible for comparison.
-
-Notes / Pitfalls.
-
-* SQLite supports window functions (3.25+). Ensure version.
-
-* Use DENSE_RANK if you prefer no gaps in ranking.
 
 ---
 
@@ -390,6 +386,7 @@ SELECT * FROM hierarchy ORDER BY level, employee_id;
 ![Fail to load image](./8.png)
 
 Reasoning: One CTE aggregates order totals; another recursively builds employee levels.
+
 Interpretation: Orders display accurate totals, and hierarchy correctly nests under the manager.
 
 Notes / Pitfalls.
@@ -422,6 +419,7 @@ ORDER BY order_month;
 ![Fail to load image](./9.png)
 
 Reasoning: String and date functions extract domains and month buckets.
+
 Interpretation: All customers share example.com, and all seven orders occurred in Sept 2024.
 
 Notes / Pitfalls.
@@ -452,6 +450,7 @@ ORDER BY customer_id;
 ![Fail to load image](./10.png)
 
 Reasoning: UNION merges NC cities with a literal value; EXCEPT finds missing orders.
+
 Interpretation: Cities include Cary–Raleigh–Durham–Charlotte, and every customer has placed an order.
 
 Notes / Pitfalls.
