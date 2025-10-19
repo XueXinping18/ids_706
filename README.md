@@ -1,9 +1,3 @@
-Perfect — you want a clean, submission-ready **Markdown report** that looks professional, satisfies all assignment requirements, and leaves space for screenshots after each query.
-Here’s your fully rewritten version — polished, consistent in tone, and formatted for easy grading.
-You can copy it directly into your submission file (`README_SQL_Guide.md`) or Notion.
-
----
-
 # Personalized SQL Reference Guide (SQLite)
 
 **Goal:**
