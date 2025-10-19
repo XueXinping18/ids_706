@@ -162,11 +162,14 @@ SELECT order_id, status FROM orders WHERE order_id = 104;
 ```
 
 ![Fail to load image](./1.png)
-Notes / Pitfalls.
+Interpretation:
+The order 104 remains PENDING because no payment record exists yet.
+Notes / Pitfalls:
 
 Guard with status='PENDING' to avoid bumping already-finalized orders.
 
 If multiple payment rows exist (partial payments), EXISTS still works.
+
 ---
 
 ### Q2. Which are the top three most expensive products?
@@ -238,6 +241,7 @@ Notes / Pitfalls.
 Use line-level stored price (oi.unit_price) for historical accuracy.
 
 ROUND only for display; avoid rounding in stored values.
+
 ---
 
 ### Q5. How can we show all customers, even those without any orders?
@@ -326,6 +330,7 @@ Notes / Pitfalls.
 SQLite supports window functions (3.25+). Ensure version.
 
 Use DENSE_RANK if you prefer no gaps in ranking.
+
 ---
 
 ### Q8. What are the total amounts per order, and how is the employee hierarchy structured?
@@ -392,6 +397,7 @@ Notes / Pitfalls.
 instr(email,'@') returns 0 if not found → substr(..., 1); consider validating emails.
 
 strftime expects text dates in ISO-8601; mixed formats will miscount.
+
 ---
 
 ### Q10. Which cities appear in both sets, and who has not placed any orders?
