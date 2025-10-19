@@ -92,7 +92,7 @@ After running each SQL command, capture the result and paste its **screenshot** 
 
 ---
 
-### Q1. How can we update an order’s status once payment is confirmed?
+### Q1. How can we update a specific order that is still pending but already have a shipped record?
 
 This query updates orders that are still pending but already have a payment record, then verifies the result.
 
@@ -107,7 +107,11 @@ SELECT order_id, status FROM orders WHERE order_id = 104;
 ```
 
 ![Fail to load image](./1.png)
+Notes / Pitfalls.
 
+Guard with status='PENDING' to avoid bumping already-finalized orders.
+
+If multiple payment rows exist (partial payments), EXISTS still works.
 ---
 
 ### Q2. Which are the top three most expensive products?
@@ -122,6 +126,11 @@ LIMIT 3;
 ```
 
 ![Fail to load image](./2.png)
+Notes / Pitfalls.
+
+Prices as numeric stored in REAL/NUMERIC; avoid text.
+
+For category-specific top‑k, add WHERE category = ?.
 
 ---
 
@@ -143,6 +152,12 @@ ORDER BY total_spent DESC;
 
 ![Fail to load image](./3.png)
 
+Notes / Pitfalls:
+
+Use HAVING for post-aggregation filters.
+
+If refunds exist, subtract them or filter by p.method/p.status.
+
 ---
 
 ### Q4. What products were included in each order, and what is each line’s total cost?
@@ -163,7 +178,11 @@ ORDER BY o.order_id, oi.order_item_id;
 ```
 
 ![Fail to load image](./4.png)
+Notes / Pitfalls.
 
+Use line-level stored price (oi.unit_price) for historical accuracy.
+
+ROUND only for display; avoid rounding in stored values.
 ---
 
 ### Q5. How can we show all customers, even those without any orders?
@@ -179,7 +198,7 @@ LEFT JOIN orders o ON o.customer_id = c.customer_id
 ORDER BY c.customer_id, o.order_id;
 ```
 
-> **RIGHT JOIN equivalent (emulation):**
+> **RIGHT JOIN equivalent (emulation given that SQLite did not support right join):**
 >
 > ```sql
 > SELECT o.order_id, c.customer_id, c.first_name
@@ -188,6 +207,12 @@ ORDER BY c.customer_id, o.order_id;
 > ```
 
 ![Fail to load image](./5.png)
+
+Notes / Pitfalls.
+
+The emulation is flipping sides, not a generic "LEFT JOIN the other way" on the same tables.
+
+If you instead orders LEFT JOIN customers, you’d include all orders, not all customers.
 
 ---
 
@@ -211,6 +236,11 @@ ORDER BY o.order_id;
 ```
 
 ![Fail to load image](./6.png)
+Notes / Pitfalls.
+
+COALESCE preserves non-null; order of args matters.
+
+Consider a tiny ref table for statuses if labels change often.
 
 ---
 
@@ -236,7 +266,11 @@ ORDER BY spend_rank;
 ```
 
 ![Fail to load image](./7.png)
+Notes / Pitfalls.
 
+SQLite supports window functions (3.25+). Ensure version.
+
+Use DENSE_RANK if you prefer no gaps in ranking.
 ---
 
 ### Q8. What are the total amounts per order, and how is the employee hierarchy structured?
@@ -270,6 +304,11 @@ SELECT * FROM hierarchy ORDER BY level, employee_id;
 ```
 
 ![Fail to load image](./8.png)
+Notes / Pitfalls.
+
+Recursive CTE must start with roots (manager_id IS NULL).
+
+Prevent cycles in messy data (e.g., add a max depth or anti-cycle guard in stricter engines).
 
 ---
 
@@ -293,7 +332,11 @@ ORDER BY order_month;
 ```
 
 ![Fail to load image](./9.png)
+Notes / Pitfalls.
 
+instr(email,'@') returns 0 if not found → substr(..., 1); consider validating emails.
+
+strftime expects text dates in ISO-8601; mixed formats will miscount.
 ---
 
 ### Q10. Which cities appear in both sets, and who has not placed any orders?
@@ -314,4 +357,9 @@ ORDER BY customer_id;
 ```
 
 ![Fail to load image](./10.png)
+Notes / Pitfalls.
+
+UNION removes duplicates; use UNION ALL to keep them.
+
+Anti-join can also be written as WHERE NOT EXISTS (...).
 
