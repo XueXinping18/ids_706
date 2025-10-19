@@ -163,9 +163,8 @@ SELECT order_id, status FROM orders WHERE order_id = 104;
 
 ![Fail to load image](./1.png)
 
-Interpretation:
-
-* The order 104 remains PENDING because no payment record exists yet.
+Reasoning: The EXISTS subquery checks for payments before updating.
+Interpretation: Order 104 stayed PENDING because no payment record was found.
 
 Notes / Pitfalls:
 
@@ -187,11 +186,15 @@ LIMIT 3;
 ```
 
 ![Fail to load image](./2.png)
+
+Reasoning: Ordered products by price descending, limited to three.
+Interpretation: Standing Desk, Ergonomic Chair, and Noise-Cancelling Headphones are the most expensive items.
+
 Notes / Pitfalls.
 
-Prices as numeric stored in REAL/NUMERIC; avoid text.
+* Prices as numeric stored in REAL/NUMERIC; avoid text.
 
-For category-specific top‑k, add WHERE category = ?.
+* For category-specific top‑k, add WHERE category = ?.
 
 ---
 
@@ -212,6 +215,9 @@ ORDER BY total_spent DESC;
 ```
 
 ![Fail to load image](./3.png)
+
+Reasoning: Aggregated total payments per customer with HAVING.
+Interpretation: Ava Nguyen and Liam Patel exceeded $300, showing high-value customers.
 
 Notes / Pitfalls:
 
@@ -239,11 +245,15 @@ ORDER BY o.order_id, oi.order_item_id;
 ```
 
 ![Fail to load image](./4.png)
+
+Reasoning: Joined orders, items, and products, computing extended prices.
+Interpretation: Each line correctly displays quantity × price totals per order.
+
 Notes / Pitfalls.
 
-Use line-level stored price (oi.unit_price) for historical accuracy.
+* Use line-level stored price (oi.unit_price) for historical accuracy.
 
-ROUND only for display; avoid rounding in stored values.
+* ROUND only for display; avoid rounding in stored values.
 
 ---
 
@@ -270,11 +280,14 @@ ORDER BY c.customer_id, o.order_id;
 
 ![Fail to load image](./5.png)
 
+Reasoning: Used a LEFT JOIN to include customers with or without orders.
+Interpretation: Every customer appears; multiple order IDs confirm one-to-many mapping.
+
 Notes / Pitfalls.
 
-The emulation is flipping sides, not a generic "LEFT JOIN the other way" on the same tables.
+* The emulation is flipping sides, not a generic "LEFT JOIN the other way" on the same tables.
 
-If you instead orders LEFT JOIN customers, you’d include all orders, not all customers.
+* If you instead orders LEFT JOIN customers, you’d include all orders, not all customers.
 
 ---
 
@@ -298,11 +311,15 @@ ORDER BY o.order_id;
 ```
 
 ![Fail to load image](./6.png)
+
+Reasoning: CASE converts codes to labels; COALESCE handles null cities.
+Interpretation: Output clearly shows readable statuses and consistent city data.
+
 Notes / Pitfalls.
 
-COALESCE preserves non-null; order of args matters.
+* COALESCE preserves non-null; order of args matters.
 
-Consider a tiny ref table for statuses if labels change often.
+* Consider a tiny ref table for statuses if labels change often.
 
 ---
 
@@ -328,11 +345,15 @@ ORDER BY spend_rank;
 ```
 
 ![Fail to load image](./7.png)
+
+Reasoning: Window functions calculate ranking and prior totals.
+Interpretation: Ava leads spending, followed by Liam and Isla, with previous totals visible for comparison.
+
 Notes / Pitfalls.
 
-SQLite supports window functions (3.25+). Ensure version.
+* SQLite supports window functions (3.25+). Ensure version.
 
-Use DENSE_RANK if you prefer no gaps in ranking.
+* Use DENSE_RANK if you prefer no gaps in ranking.
 
 ---
 
@@ -367,11 +388,15 @@ SELECT * FROM hierarchy ORDER BY level, employee_id;
 ```
 
 ![Fail to load image](./8.png)
+
+Reasoning: One CTE aggregates order totals; another recursively builds employee levels.
+Interpretation: Orders display accurate totals, and hierarchy correctly nests under the manager.
+
 Notes / Pitfalls.
 
-Recursive CTE must start with roots (manager_id IS NULL).
+* Recursive CTE must start with roots (manager_id IS NULL).
 
-Prevent cycles in messy data (e.g., add a max depth or anti-cycle guard in stricter engines).
+* Prevent cycles in messy data (e.g., add a max depth or anti-cycle guard in stricter engines).
 
 ---
 
@@ -395,11 +420,15 @@ ORDER BY order_month;
 ```
 
 ![Fail to load image](./9.png)
+
+Reasoning: String and date functions extract domains and month buckets.
+Interpretation: All customers share example.com, and all seven orders occurred in Sept 2024.
+
 Notes / Pitfalls.
 
-instr(email,'@') returns 0 if not found → substr(..., 1); consider validating emails.
+* instr(email,'@') returns 0 if not found → substr(..., 1); consider validating emails.
 
-strftime expects text dates in ISO-8601; mixed formats will miscount.
+* strftime expects text dates in ISO-8601; mixed formats will miscount.
 
 ---
 
@@ -421,9 +450,13 @@ ORDER BY customer_id;
 ```
 
 ![Fail to load image](./10.png)
+
+Reasoning: UNION merges NC cities with a literal value; EXCEPT finds missing orders.
+Interpretation: Cities include Cary–Raleigh–Durham–Charlotte, and every customer has placed an order.
+
 Notes / Pitfalls.
 
-UNION removes duplicates; use UNION ALL to keep them.
+* UNION removes duplicates; use UNION ALL to keep them.
 
-Anti-join can also be written as WHERE NOT EXISTS (...).
+* Anti-join can also be written as WHERE NOT EXISTS (...).
 
