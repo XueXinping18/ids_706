@@ -107,7 +107,7 @@ SELECT order_id, status FROM orders WHERE order_id = 104;
 ```
 
 **Screenshot:**
-*(Insert image `Q1.png` here)*
+![Fail to load image](./1.png)
 
 ---
 
@@ -123,7 +123,7 @@ LIMIT 3;
 ```
 
 **Screenshot:**
-*(Insert image `Q2.png` here)*
+![Fail to load image](./2.png)
 
 ---
 
