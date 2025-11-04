@@ -1,461 +1,417 @@
-# Personalized SQL Reference Guide (SQLite)
+# Airflow ETL Pipeline Project
 
-**Goal:**
-This project practices intermediate to advanced SQL concepts, including table design, data manipulation, joins, aggregation, window functions, and common table expressions.
-The guide documents both the SQL logic and outputs as a reusable reference for interviews and data analysis tasks.
+## Overview
 
----
+This project demonstrates a complete ETL (Extract, Transform, Load) pipeline using Apache Airflow with parallel processing capabilities. The pipeline ingests customer and order data, transforms them, merges the datasets, loads them into PostgreSQL, and performs data analysis including machine learning model training.
 
-## 1. Database Schema and Design Rationale
+## Features
 
-### Business Goal and Data Model
+- **Parallel Processing**: Ingestion and transformation tasks run in parallel to optimize execution time
+- **TaskGroups**: Related transformation tasks are organized using Airflow TaskGroups
+- **Data Transformation**: Validation, enrichment, and metric calculation
+- **Database Integration**: PostgreSQL for data storage
+- **Analysis**: Statistical analysis and machine learning model training
+- **Automated Cleanup**: Removes intermediate files after processing
+- **Scheduled Execution**: Configured to run daily
+- **Containerized Setup**: Complete Docker-based development environment
 
-The database models a simplified **commerce system** that tracks customers, products, orders, and payments.
-Key relationships:
+## Architecture
 
-* **Customers** place **Orders**.
-* Each order contains multiple **Order Items** referencing **Products**.
-* **Payments** record how orders are paid.
-* **Employees** process orders and report to managers.
+### Pipeline Flow
 
-This design supports analytics such as customer spending, product sales, and employee hierarchy.
-
----
-
-### Entities and Purpose
-
-| Table           | Description                                                    |
-| --------------- | -------------------------------------------------------------- |
-| **customers**   | Stores buyer information such as name, email, city, and state. |
-| **products**    | Product catalog containing item name, category, and price.     |
-| **orders**      | Order header capturing date, status, and sales employee.       |
-| **order_items** | Line-level order details: product, quantity, and unit price.   |
-| **payments**    | Payment records linked to orders, allowing multiple methods.   |
-| **employees**   | Employee data with `manager_id` for organizational hierarchy.  |
-
-Each table keeps only attributes unique to that entity, minimizing redundancy.
-Tables are created as follows.
-```sql
-CREATE TABLE customers (
-  customer_id INTEGER PRIMARY KEY,
-  first_name TEXT NOT NULL,
-  last_name  TEXT NOT NULL,
-  email      TEXT UNIQUE,
-  city       TEXT,
-  state      TEXT,
-  created_at TEXT DEFAULT (date('now'))
-);
-
-CREATE TABLE products (
-  product_id INTEGER PRIMARY KEY,
-  name       TEXT NOT NULL,
-  category   TEXT NOT NULL,
-  price      REAL NOT NULL CHECK(price >= 0)
-);
-
-CREATE TABLE employees (
-  employee_id INTEGER PRIMARY KEY,
-  full_name   TEXT NOT NULL,
-  role        TEXT NOT NULL,
-  manager_id  INTEGER,
-  FOREIGN KEY(manager_id) REFERENCES employees(employee_id)
-);
-
-CREATE TABLE orders (
-  order_id    INTEGER PRIMARY KEY,
-  customer_id INTEGER NOT NULL,
-  employee_id INTEGER,
-  order_date  TEXT NOT NULL,           -- ISO date string
-  status      TEXT NOT NULL,            -- 'PENDING','SHIPPED','CANCELLED','REFUNDED'
-  FOREIGN KEY(customer_id) REFERENCES customers(customer_id),
-  FOREIGN KEY(employee_id) REFERENCES employees(employee_id)
-);
-
-CREATE TABLE order_items (
-  order_item_id INTEGER PRIMARY KEY,
-  order_id      INTEGER NOT NULL,
-  product_id    INTEGER NOT NULL,
-  quantity      INTEGER NOT NULL CHECK(quantity > 0),
-  unit_price    REAL NOT NULL CHECK(unit_price >= 0),
-  FOREIGN KEY(order_id)   REFERENCES orders(order_id),
-  FOREIGN KEY(product_id) REFERENCES products(product_id)
-);
-
-CREATE TABLE payments (
-  payment_id INTEGER PRIMARY KEY,
-  order_id   INTEGER NOT NULL,
-  amount     REAL NOT NULL CHECK(amount >= 0),
-  method     TEXT NOT NULL,            -- 'CARD','CASH','PAYPAL'
-  paid_at    TEXT NOT NULL,
-  FOREIGN KEY(order_id) REFERENCES orders(order_id)
-);
 ```
----
-
-### Normalization (≈ 3NF)
-
-* Repeating groups separated into related tables (e.g., `order_items` for one-to-many).
-* Attributes depend only on their primary key (no partial dependencies).
-* Customer and product details are stored in their own tables to prevent duplication.
-* Historical sale prices stored in `order_items.unit_price` ensure data accuracy over time.
-
----
-
-### Keys and Relationships
-
-* **Primary Keys:** `INTEGER` surrogates (auto-increment).
-* **Foreign Keys:**
-
-  * `orders.customer_id → customers.customer_id`
-  * `orders.employee_id → employees.employee_id`
-  * `order_items.order_id → orders.order_id`
-  * `order_items.product_id → products.product_id`
-  * `payments.order_id → orders.order_id`
-  * `employees.manager_id → employees.employee_id`
-
-**Cardinalities:**
-
-* customers 1—* orders
-* orders 1—* order_items
-* products 1—* order_items
-* orders 1—* payments
-* employees 1—* employees (manager hierarchy)
-
----
-
-### Constraints and Business Rules
-
-* **NOT NULL** constraints for mandatory fields such as name and price.
-* **CHECK** constraints to prevent invalid data (`price >= 0`, `quantity > 0`).
-* **UNIQUE(email)** to avoid duplicate customer records.
-* **ISO-8601 text dates** (e.g., `'2024-09-03'`) for easy date comparisons in SQLite.
-* **RIGHT JOIN note:** SQLite does not support `RIGHT JOIN`.
-  You can emulate it with a reversed `LEFT JOIN`:
-
-  ```sql
-  SELECT o.order_id, c.customer_id, c.first_name
-  FROM orders o
-  LEFT JOIN customers c ON c.customer_id = o.customer_id;
-  ```
-
----
-
-## 2. Practice Questions and Queries
-
----
-
-### Q1. How can we update a specific order that is still pending but already have a shipped record?
-
-This query updates orders that are still pending but already have a payment record, then verifies the result.
-
-```sql
-UPDATE orders
-SET status = 'SHIPPED'
-WHERE order_id = 104
-  AND status = 'PENDING'
-  AND EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.order_id);
-
-SELECT order_id, status FROM orders WHERE order_id = 104;
+┌─────────────────────────────────────────────────────────────────┐
+│                         Data Ingestion                          │
+│                         (Parallel)                              │
+├──────────────────────────────┬──────────────────────────────────┤
+│    Ingest Customer Data      │      Ingest Order Data           │
+└──────────────┬───────────────┴────────────────┬─────────────────┘
+               │                                │
+               ▼                                ▼
+┌──────────────────────────────┐  ┌────────────────────────────────┐
+│  Customer Transformation     │  │   Order Transformation         │
+│  (TaskGroup)                 │  │   (TaskGroup)                  │
+│  ┌────────────────────────┐  │  │  ┌──────────────────────────┐ │
+│  │ Validate Customers     │  │  │  │ Validate Orders          │ │
+│  └───────────┬────────────┘  │  │  └──────────┬───────────────┘ │
+│              ▼               │  │             ▼                 │
+│  ┌────────────────────────┐  │  │  ┌──────────────────────────┐ │
+│  │ Enrich Customers       │  │  │  │ Calculate Metrics        │ │
+│  └────────────────────────┘  │  │  └──────────────────────────┘ │
+└──────────────┬───────────────┘  └────────────┬───────────────────┘
+               │                               │
+               └───────────────┬───────────────┘
+                               ▼
+                    ┌──────────────────────┐
+                    │    Merge Datasets    │
+                    └──────────┬───────────┘
+                               ▼
+                    ┌──────────────────────┐
+                    │  Load to PostgreSQL  │
+                    └──────────┬───────────┘
+                               │
+               ┌───────────────┴────────────────┐
+               │                                │
+               ▼                                ▼
+    ┌──────────────────┐          ┌────────────────────────┐
+    │  Perform Analysis│          │  Train ML Model        │
+    └──────────┬───────┘          └────────┬───────────────┘
+               │                           │
+               └──────────┬────────────────┘
+                          ▼
+              ┌───────────────────────┐
+              │  Cleanup Intermediate │
+              │       Files           │
+              └───────────────────────┘
 ```
 
-![Fail to load image](./1.png)
+## Project Structure
 
-Reasoning: The EXISTS subquery checks for payments before updating.
+```
+.
+├── .devcontainer/
+│   └── devcontainer.json       # VS Code Dev Container configuration
+├── dags/
+│   └── etl_pipeline_dag.py     # Main Airflow DAG
+├── data/                        # Data directory (created at runtime)
+├── logs/                        # Airflow logs (created at runtime)
+├── plugins/                     # Airflow plugins directory
+├── scripts/                     # Utility scripts
+├── docker-compose.yml          # Docker Compose configuration
+├── Dockerfile                  # Custom Airflow image
+├── requirements.txt            # Python dependencies
+├── .env                        # Environment variables
+├── .gitignore                  # Git ignore file
+└── README.md                   # This file
+```
 
-Interpretation: Order 104 stayed PENDING because no payment record was found.
+## Prerequisites
 
-Notes / Pitfalls:
+- Docker and Docker Compose installed
+- At least 4GB of available RAM
+- Basic understanding of Apache Airflow concepts
 
-* Guard with status='PENDING' to avoid bumping already-finalized orders.
+## Setup Instructions
 
-* If multiple payment rows exist (partial payments), EXISTS still works.
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd ids_706
+```
+
+### 2. Start Airflow
+
+```bash
+# Initialize Airflow (first time only)
+docker-compose up airflow-init
+
+# Start all services
+docker-compose up -d
+```
+
+### 3. Access Airflow Web UI
+
+- URL: http://localhost:8080
+- Username: `airflow`
+- Password: `airflow`
+
+### 4. Verify Services
+
+```bash
+# Check running containers
+docker-compose ps
+
+# View logs
+docker-compose logs -f airflow-scheduler
+```
+
+## DAG Details
+
+### DAG Name: `etl_pipeline_dag`
+
+- **Schedule**: Daily (`@daily`)
+- **Start Date**: 2024-01-01
+- **Catchup**: False
+- **Tags**: etl, pipeline, parallel
+
+### Tasks Overview
+
+#### 1. Data Ingestion (Parallel)
+
+- **`ingest_customers`**: Generates and ingests synthetic customer data (1,000 customers)
+- **`ingest_orders`**: Generates and ingests synthetic order data (5,000 orders)
+
+#### 2. Customer Transformation (TaskGroup)
+
+- **`validate_customers`**: Removes duplicates, null values, and validates data quality
+- **`enrich_customers`**: Adds age groups and customer segments
+
+#### 3. Order Transformation (TaskGroup)
+
+- **`validate_orders`**: Removes duplicates, null values, and validates data quality
+- **`calculate_metrics`**: Calculates total amounts and order size categories
+
+#### 4. Data Integration
+
+- **`merge_data`**: Merges customer and order datasets on customer_id
+
+#### 5. Database Loading
+
+- **`load_to_postgres`**: Loads merged data into PostgreSQL table `customer_orders`
+
+#### 6. Analysis (Parallel)
+
+- **`perform_analysis`**:
+  - Generates summary statistics by city, age group, and product
+  - Calculates key metrics (revenue, average order value, etc.)
+  - Saves results to JSON file
+
+- **`train_ml_model`**:
+  - Trains a Random Forest classifier to predict customer segments
+  - Evaluates model performance
+  - Calculates feature importance
+  - Saves model results to JSON file
+
+#### 7. Cleanup
+
+- **`cleanup_intermediate_files`**: Removes intermediate CSV files, retains final outputs
+
+### Data Flow
+
+All tasks pass **file paths** (not actual data) through XCom to maintain efficiency and follow Airflow best practices.
+
+## Key Datasets
+
+### Customer Data
+
+- `customer_id`: Unique identifier
+- `name`: Customer name
+- `email`: Customer email
+- `age`: Customer age
+- `city`: Customer location
+- `registration_date`: Account registration date
+- `age_group`: Derived age category
+- `customer_segment`: Premium/Standard/Basic
+
+### Order Data
+
+- `order_id`: Unique identifier
+- `customer_id`: Foreign key to customers
+- `product`: Product name
+- `quantity`: Order quantity
+- `price`: Unit price
+- `order_date`: Order timestamp
+- `total_amount`: Calculated total (quantity × price)
+- `order_size`: Small/Medium/Large/Extra Large
+
+## Database Schema
+
+### Table: `customer_orders`
+
+The merged dataset contains all customer and order information with the following key columns:
+
+- Customer fields: customer_id, name, email, age, city, age_group, customer_segment
+- Order fields: order_id, product, quantity, price, total_amount, order_size
+- Temporal fields: order_date, order_year, order_month
+
+## Analysis Outputs
+
+### 1. Analysis Results (`data/analysis_results.json`)
+
+```json
+{
+  "total_revenue": 12345678.90,
+  "total_orders": 5000,
+  "average_order_value": 2469.14,
+  "unique_customers": 995,
+  "top_city": "New York",
+  "top_product": "Product_A"
+}
+```
+
+### 2. ML Model Results (`data/model_results.json`)
+
+```json
+{
+  "accuracy": 0.34,
+  "feature_importance": [
+    {"feature": "total_amount", "importance": 0.45},
+    {"feature": "quantity", "importance": 0.35},
+    {"feature": "age", "importance": 0.20}
+  ],
+  "total_samples": 995,
+  "train_samples": 796,
+  "test_samples": 199
+}
+```
+
+## Parallel Processing
+
+The DAG is designed for maximum parallelism:
+
+1. **Ingestion**: Customer and order data ingestion runs in parallel
+2. **Transformation**: Customer and order transformations run in parallel TaskGroups
+3. **Analysis**: Statistical analysis and ML training run in parallel
+
+This parallel architecture significantly reduces total execution time.
+
+## Best Practices Implemented
+
+- **XCom for Paths Only**: Only file paths are passed between tasks, not actual data
+- **Error Handling**: Retries configured with 5-minute delay
+- **Data Validation**: Multiple validation steps ensure data quality
+- **Resource Management**: Intermediate files cleaned up automatically
+- **Modularity**: Each function has a single, well-defined responsibility
+- **Documentation**: Comprehensive docstrings and comments
+
+## Monitoring and Debugging
+
+### View DAG in Airflow UI
+
+1. Navigate to http://localhost:8080
+2. Click on `etl_pipeline_dag`
+3. View the Graph or Grid view to see task dependencies
+4. Click on individual tasks to see logs and XCom values
+
+### Check Logs
+
+```bash
+# Scheduler logs
+docker-compose logs airflow-scheduler
+
+# Webserver logs
+docker-compose logs airflow-webserver
+
+# Task logs
+# Available in Airflow UI under each task
+```
+
+### Access PostgreSQL
+
+```bash
+# Connect to PostgreSQL
+docker-compose exec postgres psql -U airflow
+
+# Query data
+SELECT COUNT(*) FROM customer_orders;
+SELECT city, COUNT(*) as customer_count FROM customer_orders GROUP BY city;
+```
+
+### Inspect Data Files
+
+```bash
+# List data files
+docker-compose exec airflow-scheduler ls -lh /opt/airflow/data/
+
+# View file contents
+docker-compose exec airflow-scheduler cat /opt/airflow/data/analysis_results.json
+```
+
+## Troubleshooting
+
+### Issue: Services won't start
+
+```bash
+# Stop all services
+docker-compose down
+
+# Remove volumes
+docker-compose down -v
+
+# Restart
+docker-compose up airflow-init
+docker-compose up -d
+```
+
+### Issue: Permission errors
+
+```bash
+# Check AIRFLOW_UID in .env matches your user
+echo $UID
+
+# Update .env file if needed
+```
+
+### Issue: DAG not appearing
+
+```bash
+# Check scheduler logs
+docker-compose logs airflow-scheduler
+
+# Verify DAG file syntax
+docker-compose exec airflow-scheduler python /opt/airflow/dags/etl_pipeline_dag.py
+```
+
+## Stopping the Pipeline
+
+```bash
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (clean slate)
+docker-compose down -v
+```
+
+## Extension Ideas
+
+### Optional Enhancements
+
+1. **PySpark Integration** (15% Bonus):
+   - Add PySpark for large-scale data transformations
+   - Use Spark for parallel aggregations
+   - Implement Spark ML for model training
+
+2. **Additional Data Sources**:
+   - Integrate with real APIs
+   - Add support for CSV/JSON file uploads
+   - Connect to external databases
+
+3. **Advanced Analysis**:
+   - Time series forecasting
+   - Customer churn prediction
+   - Product recommendation system
+
+4. **Monitoring**:
+   - Add Airflow alerts
+   - Integrate with monitoring tools
+   - Create custom metrics
+
+## Technologies Used
+
+- **Apache Airflow 2.7.3**: Workflow orchestration
+- **PostgreSQL 13**: Data storage
+- **Docker & Docker Compose**: Containerization
+- **Python 3.11**: Programming language
+- **Pandas**: Data manipulation
+- **Scikit-learn**: Machine learning
+- **SQLAlchemy**: Database ORM
+
+## Performance Considerations
+
+- Parallel task execution reduces total pipeline time by ~50%
+- File-based XCom approach handles large datasets efficiently
+- TaskGroups provide logical organization without overhead
+- Cleanup task manages storage automatically
+
+## License
+
+This project is for educational purposes as part of IDS 706 coursework.
+
+## Author
+
+Created for IDS 706 - Data Engineering Systems
+
+## Screenshots
+
+### DAG Graph View
+
+![DAG Graph](screenshots/dag_graph.png)
+
+### Successful Execution
+
+![DAG Success](screenshots/dag_success.png)
 
 ---
 
-### Q2. Which are the top three most expensive products?
-
-This query retrieves the highest-priced products in descending order.
-
-```sql
-SELECT product_id, name, category, price
-FROM products
-ORDER BY price DESC
-LIMIT 3;
-```
-
-![Fail to load image](./2.png)
-
-Reasoning: Ordered products by price descending, limited to three.
-
-Interpretation: Standing Desk, Ergonomic Chair, and Noise-Cancelling Headphones are the most expensive items.
-
-Notes / Pitfalls.
-
-* Prices as numeric stored in REAL/NUMERIC; avoid text.
-
-* For category-specific top‑k, add WHERE category = ?.
-
----
-
-### Q3. Which customers have spent at least $300 in total payments?
-
-This query aggregates total payments per customer and filters with `HAVING`.
-
-```sql
-SELECT c.customer_id,
-       c.first_name || ' ' || c.last_name AS customer_name,
-       ROUND(SUM(p.amount), 2) AS total_spent
-FROM customers c
-JOIN orders o   ON o.customer_id = c.customer_id
-JOIN payments p ON p.order_id = o.order_id
-GROUP BY c.customer_id
-HAVING SUM(p.amount) >= 300
-ORDER BY total_spent DESC;
-```
-
-![Fail to load image](./3.png)
-
-Reasoning: Aggregated total payments per customer with HAVING.
-
-Interpretation: Ava Nguyen and Liam Patel exceeded $300, showing high-value customers.
-
-Notes / Pitfalls:
-
-Use HAVING for post-aggregation filters.
-
-If refunds exist, subtract them or filter by p.method/p.status.
-
----
-
-### Q4. What products were included in each order, and what is each line’s total cost?
-
-This query joins multiple tables to show detailed order lines and computed extended prices.
-
-```sql
-SELECT o.order_id, o.order_date,
-       c.first_name || ' ' || c.last_name AS customer_name,
-       pr.name AS product_name,
-       oi.quantity, oi.unit_price,
-       ROUND(oi.quantity * oi.unit_price, 2) AS extended_price
-FROM orders o
-JOIN customers c    ON c.customer_id = o.customer_id
-JOIN order_items oi ON oi.order_id = o.order_id
-JOIN products pr    ON pr.product_id = oi.product_id
-ORDER BY o.order_id, oi.order_item_id;
-```
-
-![Fail to load image](./4.png)
-
-Reasoning: Joined orders, items, and products, computing extended prices.
-
-Interpretation: Each line correctly displays quantity × price totals per order.
-
-Notes / Pitfalls.
-
-* Use line-level stored price (oi.unit_price) for historical accuracy.
-
-* ROUND only for display; avoid rounding in stored values.
-
----
-
-### Q5. How can we show all customers, even those without any orders?
-
-This query demonstrates a `LEFT JOIN` and explains how to emulate a `RIGHT JOIN` in SQLite.
-
-```sql
-SELECT c.customer_id,
-       c.first_name || ' ' || c.last_name AS customer_name,
-       o.order_id
-FROM customers c
-LEFT JOIN orders o ON o.customer_id = c.customer_id
-ORDER BY c.customer_id, o.order_id;
-```
-
-> **RIGHT JOIN equivalent (emulation given that SQLite did not support right join):**
->
-> ```sql
-> SELECT o.order_id, c.customer_id, c.first_name
-> FROM orders o
-> LEFT JOIN customers c ON c.customer_id = o.customer_id;
-> ```
-
-![Fail to load image](./5.png)
-
-Reasoning: Used a LEFT JOIN to include customers with or without orders.
-
-Interpretation: Every customer appears; multiple order IDs confirm one-to-many mapping.
-
-Notes / Pitfalls.
-
-* The emulation is flipping sides, not a generic "LEFT JOIN the other way" on the same tables.
-
----
-
-### Q6. How can we make order statuses more readable and handle missing cities?
-
-This query uses `CASE WHEN` and `COALESCE` to clean and standardize data.
-
-```sql
-SELECT o.order_id,
-       CASE o.status
-         WHEN 'SHIPPED'   THEN 'Completed'
-         WHEN 'PENDING'   THEN 'Awaiting Payment/Action'
-         WHEN 'CANCELLED' THEN 'Cancelled'
-         WHEN 'REFUNDED'  THEN 'Refunded'
-         ELSE 'Unknown'
-       END AS status_label,
-       COALESCE(c.city, 'Unknown City') AS city
-FROM orders o
-JOIN customers c ON c.customer_id = o.customer_id
-ORDER BY o.order_id;
-```
-
-![Fail to load image](./6.png)
-
-Reasoning: CASE converts codes to labels; COALESCE handles null cities.
-
-Interpretation: Output clearly shows readable statuses and consistent city data.
-
-Notes / Pitfalls.
-
-* COALESCE preserves non-null; order of args matters.
-
-* Consider a tiny ref table for statuses if labels change often.
-
----
-
-### Q7. Which customers spent the most, and how do they rank?
-
-This query uses window functions to rank customers by spending and compare to previous totals.
-
-```sql
-WITH totals AS (
-  SELECT c.customer_id,
-         c.first_name || ' ' || c.last_name AS customer_name,
-         ROUND(SUM(p.amount), 2) AS total_spent
-  FROM customers c
-  JOIN orders o   ON o.customer_id = c.customer_id
-  JOIN payments p ON p.order_id = o.order_id
-  GROUP BY c.customer_id
-)
-SELECT customer_id, customer_name, total_spent,
-       RANK() OVER (ORDER BY total_spent DESC) AS spend_rank,
-       LAG(total_spent) OVER (ORDER BY total_spent DESC) AS prev_total
-FROM totals
-ORDER BY spend_rank;
-```
-
-![Fail to load image](./7.png)
-
-Reasoning: Window functions calculate ranking and prior totals.
-
-Interpretation: Ava leads spending, followed by Liam and Isla, with previous totals visible for comparison.
-
----
-
-### Q8. What are the total amounts per order, and how is the employee hierarchy structured?
-
-This includes both a standard and recursive CTE.
-
-```sql
--- Order totals per order
-WITH order_totals AS (
-  SELECT o.order_id, SUM(oi.quantity * oi.unit_price) AS order_total
-  FROM orders o
-  JOIN order_items oi ON oi.order_id = o.order_id
-  GROUP BY o.order_id
-)
-SELECT o.order_id, o.status, ROUND(ot.order_total, 2) AS order_total
-FROM orders o
-JOIN order_totals ot ON ot.order_id = o.order_id
-ORDER BY o.order_id;
-
--- Recursive CTE for hierarchy
-WITH RECURSIVE hierarchy AS (
-  SELECT employee_id, full_name, role, manager_id, 0 AS level
-  FROM employees
-  WHERE manager_id IS NULL
-  UNION ALL
-  SELECT e.employee_id, e.full_name, e.role, e.manager_id, h.level + 1
-  FROM employees e
-  JOIN hierarchy h ON e.manager_id = h.employee_id
-)
-SELECT * FROM hierarchy ORDER BY level, employee_id;
-```
-
-![Fail to load image](./8.png)
-
-Reasoning: One CTE aggregates order totals; another recursively builds employee levels.
-
-Interpretation: Orders display accurate totals, and hierarchy correctly nests under the manager.
-
-Notes / Pitfalls.
-
-* Recursive CTE must start with roots (manager_id IS NULL).
-
-* Prevent cycles in messy data (e.g., add a max depth or anti-cycle guard in stricter engines).
-
----
-
-### Q9. How can we extract email domains and group orders by month?
-
-This query applies string and date functions for data transformation.
-
-```sql
--- Extract email domain
-SELECT c.customer_id, c.first_name, c.last_name,
-       lower(substr(c.email, instr(c.email, '@') + 1)) AS email_domain
-FROM customers c
-ORDER BY c.customer_id;
-
--- Orders grouped by month
-SELECT strftime('%Y-%m', o.order_date) AS order_month,
-       COUNT(*) AS orders_count
-FROM orders o
-GROUP BY strftime('%Y-%m', o.order_date)
-ORDER BY order_month;
-```
-
-![Fail to load image](./9.png)
-
-Reasoning: String and date functions extract domains and month buckets.
-
-Interpretation: All customers share example.com, and all seven orders occurred in Sept 2024.
-
-Notes / Pitfalls.
-
-* instr(email,'@') returns 0 if not found → substr(..., 1); consider validating emails.
-
-* strftime expects text dates in ISO-8601; mixed formats will miscount.
-
----
-
-### Q10. Which cities appear in both sets, and who has not placed any orders?
-
-This query uses `UNION` and `EXCEPT` to combine and exclude datasets.
-
-```sql
--- Combine distinct city sets
-SELECT DISTINCT city FROM customers WHERE state = 'NC'
-UNION
-SELECT 'Charlotte' AS city;
-
--- Customers without orders
-SELECT customer_id FROM customers
-EXCEPT
-SELECT DISTINCT customer_id FROM orders
-ORDER BY customer_id;
-```
-
-![Fail to load image](./10.png)
-
-Reasoning: UNION merges NC cities with a literal value; EXCEPT finds missing orders.
-
-Interpretation: Cities include Cary–Raleigh–Durham–Charlotte, and every customer has placed an order.
-
-Notes / Pitfalls.
-
-* UNION removes duplicates; use UNION ALL to keep them.
-
-* Anti-join can also be written as WHERE NOT EXISTS (...).
-
+**Note**: Remember to trigger the DAG manually for the first run or wait for the scheduled execution!
