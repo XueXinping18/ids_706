@@ -19,8 +19,8 @@ default_args = {
     'depends_on_past': False,
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retries': 2,
+    'retry_delay': timedelta(minutes=1),
 }
 
 # Define the DAG
@@ -209,6 +209,9 @@ def merge_datasets(**context):
 
 def load_to_postgres(**context):
     """Load merged data to PostgreSQL"""
+    import time
+    from sqlalchemy import text
+
     file_path = context['ti'].xcom_pull(task_ids='merge_data')
     print(f"Loading data to PostgreSQL from {file_path}")
 
@@ -217,11 +220,32 @@ def load_to_postgres(**context):
     # Create database engine
     engine = create_engine(DB_CONN)
 
-    # Load data to PostgreSQL
+    # Load data to PostgreSQL with error handling for concurrent runs
     table_name = 'customer_orders'
-    df.to_sql(table_name, engine, if_exists='replace', index=False)
+    max_attempts = 3
 
-    print(f"Loaded {len(df)} records to table '{table_name}'")
+    for attempt in range(max_attempts):
+        try:
+            # Drop table first if it exists to avoid race conditions
+            with engine.begin() as conn:
+                conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+
+            # Small delay to avoid race condition with concurrent runs
+            time.sleep(0.5)
+
+            # Create and load table
+            df.to_sql(table_name, engine, if_exists='replace', index=False)
+            print(f"Loaded {len(df)} records to table '{table_name}'")
+            break
+
+        except Exception as e:
+            if attempt < max_attempts - 1:
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                print(f"Retrying in {(attempt + 1) * 2} seconds...")
+                time.sleep((attempt + 1) * 2)
+            else:
+                print(f"All {max_attempts} attempts failed")
+                raise
 
     return table_name
 
@@ -406,32 +430,34 @@ ingest_orders_task = PythonOperator(
 )
 
 # TaskGroup for customer data transformation
-with TaskGroup('customer_transformation', dag=dag) as customer_transformation:
-    validate_customers_task = PythonOperator(
-        task_id='validate_customers',
-        python_callable=validate_customer_data,
-    )
+with dag:
+    with TaskGroup('customer_transformation') as customer_transformation:
+        validate_customers_task = PythonOperator(
+            task_id='validate_customers',
+            python_callable=validate_customer_data,
+        )
 
-    enrich_customers_task = PythonOperator(
-        task_id='enrich_customers',
-        python_callable=enrich_customer_data,
-    )
+        enrich_customers_task = PythonOperator(
+            task_id='enrich_customers',
+            python_callable=enrich_customer_data,
+        )
 
-    validate_customers_task >> enrich_customers_task
+        validate_customers_task >> enrich_customers_task
 
 # TaskGroup for order data transformation
-with TaskGroup('order_transformation', dag=dag) as order_transformation:
-    validate_orders_task = PythonOperator(
-        task_id='validate_orders',
-        python_callable=validate_order_data,
-    )
+with dag:
+    with TaskGroup('order_transformation') as order_transformation:
+        validate_orders_task = PythonOperator(
+            task_id='validate_orders',
+            python_callable=validate_order_data,
+        )
 
-    calculate_metrics_task = PythonOperator(
-        task_id='calculate_metrics',
-        python_callable=calculate_order_metrics,
-    )
+        calculate_metrics_task = PythonOperator(
+            task_id='calculate_metrics',
+            python_callable=calculate_order_metrics,
+        )
 
-    validate_orders_task >> calculate_metrics_task
+        validate_orders_task >> calculate_metrics_task
 
 # Task: Merge datasets
 merge_data_task = PythonOperator(
