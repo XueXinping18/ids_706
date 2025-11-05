@@ -308,75 +308,6 @@ docker-compose exec airflow-scheduler ls -lh /opt/airflow/data/
 docker-compose exec airflow-scheduler cat /opt/airflow/data/analysis_results.json
 ```
 
-## Troubleshooting
-
-### Issue: Services won't start
-
-```bash
-# Stop all services
-docker-compose down
-
-# Remove volumes
-docker-compose down -v
-
-# Restart
-docker-compose up airflow-init
-docker-compose up -d
-```
-
-### Issue: Permission errors
-
-```bash
-# Check AIRFLOW_UID in .env matches your user
-echo $UID
-
-# Update .env file if needed
-```
-
-### Issue: DAG not appearing
-
-```bash
-# Check scheduler logs
-docker-compose logs airflow-scheduler
-
-# Verify DAG file syntax
-docker-compose exec airflow-scheduler python /opt/airflow/dags/etl_pipeline_dag.py
-```
-
-## Stopping the Pipeline
-
-```bash
-# Stop all services
-docker-compose down
-
-# Stop and remove volumes (clean slate)
-docker-compose down -v
-```
-
-## Extension Ideas
-
-### Optional Enhancements
-
-1. **PySpark Integration** (15% Bonus):
-   - Add PySpark for large-scale data transformations
-   - Use Spark for parallel aggregations
-   - Implement Spark ML for model training
-
-2. **Additional Data Sources**:
-   - Integrate with real APIs
-   - Add support for CSV/JSON file uploads
-   - Connect to external databases
-
-3. **Advanced Analysis**:
-   - Time series forecasting
-   - Customer churn prediction
-   - Product recommendation system
-
-4. **Monitoring**:
-   - Add Airflow alerts
-   - Integrate with monitoring tools
-   - Create custom metrics
-
 ## Technologies Used
 
 - **Apache Airflow 2.7.3**: Workflow orchestration
@@ -393,14 +324,6 @@ docker-compose down -v
 - File-based XCom approach handles large datasets efficiently
 - TaskGroups provide logical organization without overhead
 - Cleanup task manages storage automatically
-
-## License
-
-This project is for educational purposes as part of IDS 706 coursework.
-
-## Author
-
-Created for IDS 706 - Data Engineering Systems
 
 ## Screenshots
 
